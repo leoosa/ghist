@@ -29,7 +29,7 @@ export async function listTasks(
   return request<Task[]>(`/tasks${qs ? `?${qs}` : ''}`);
 }
 
-export async function getTask(id: number): Promise<Task> {
+export async function getTask(id: string): Promise<Task> {
   return request<Task>(`/tasks/${id}`);
 }
 
@@ -49,7 +49,7 @@ export async function createTask(data: {
 }
 
 export async function updateTask(
-  id: number,
+  id: string,
   data: Partial<Pick<Task, 'title' | 'description' | 'plan' | 'status' | 'milestone' | 'commit_hash' | 'priority' | 'type' | 'legacy_id'>>
 ): Promise<Task> {
   return request<Task>(`/tasks/${id}`, {
@@ -58,7 +58,7 @@ export async function updateTask(
   });
 }
 
-export async function deleteTask(id: number): Promise<void> {
+export async function deleteTask(id: string): Promise<void> {
   await request(`/tasks/${id}`, { method: 'DELETE' });
 }
 
@@ -67,14 +67,14 @@ export async function listEvents(limit?: number): Promise<Event[]> {
   return request<Event[]>(`/events${qs}`);
 }
 
-export async function listTaskEvents(taskId: number): Promise<Event[]> {
+export async function listTaskEvents(taskId: string): Promise<Event[]> {
   return request<Event[]>(`/tasks/${taskId}/events`);
 }
 
 export async function createEvent(data: {
   type?: string;
   message: string;
-  task_id?: number | null;
+  task_id?: string | null;
 }): Promise<Event> {
   return request<Event>('/events', {
     method: 'POST',

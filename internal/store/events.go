@@ -19,7 +19,7 @@ func (s *Store) eventPath(id int64) string {
 	return filepath.Join(s.eventsDir(), fmt.Sprintf("%d.json", id))
 }
 
-func (s *Store) CreateEvent(typ, message, metadata string, taskID *int64) (*models.Event, error) {
+func (s *Store) CreateEvent(typ, message, metadata string, taskID *string) (*models.Event, error) {
 	if typ == "" {
 		typ = "log"
 	}
@@ -76,7 +76,7 @@ func (s *Store) ListEvents(limit int) ([]models.Event, error) {
 	return events, nil
 }
 
-func (s *Store) ListEventsByTask(taskID int64) ([]models.Event, error) {
+func (s *Store) ListEventsByTask(taskID string) ([]models.Event, error) {
 	events, err := s.readAllEvents()
 	if err != nil {
 		return nil, err
@@ -118,7 +118,7 @@ func (s *Store) readAllEvents() ([]models.Event, error) {
 
 // clearEventTaskID sets task_id to nil on all events referencing taskID.
 // Used as a cascade when a task is deleted.
-func (s *Store) clearEventTaskID(taskID int64) {
+func (s *Store) clearEventTaskID(taskID string) {
 	events, err := s.readAllEvents()
 	if err != nil {
 		return

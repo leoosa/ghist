@@ -9,9 +9,9 @@ import (
 )
 
 type createEventRequest struct {
-	Type    string `json:"type"`
-	Message string `json:"message"`
-	TaskID  *int64 `json:"task_id"`
+	Type    string  `json:"type"`
+	Message string  `json:"message"`
+	TaskID  *string `json:"task_id"`
 }
 
 func (s *Server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
@@ -33,12 +33,12 @@ func (s *Server) handleCreateEvent(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleListTaskEvents(w http.ResponseWriter, r *http.Request) {
-	id, err := models.ParseTaskID(r.PathValue("id"))
+	task, err := s.store.GetTask(r.PathValue("id"))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid task id")
+		writeError(w, http.StatusNotFound, err.Error())
 		return
 	}
-	events, err := s.store.ListEventsByTask(id)
+	events, err := s.store.ListEventsByTask(task.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

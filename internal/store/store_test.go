@@ -1,7 +1,12 @@
 package store
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 func newTestStore(t *testing.T) *Store {
@@ -22,8 +27,8 @@ func TestCreateAndGetTask(t *testing.T) {
 	if err != nil {
 		t.Fatalf("creating task: %v", err)
 	}
-	if task.ID != 1 {
-		t.Errorf("expected id 1, got %d", task.ID)
+	if task.ID == "" {
+		t.Errorf("expected non-empty UUID id, got empty")
 	}
 	if task.Title != "Test task" {
 		t.Errorf("expected title 'Test task', got %q", task.Title)
@@ -34,16 +39,60 @@ func TestCreateAndGetTask(t *testing.T) {
 	if task.Milestone != "v1" {
 		t.Errorf("expected milestone 'v1', got %q", task.Milestone)
 	}
-	if task.RefID != "GHST-1" {
-		t.Errorf("expected ref_id 'GHST-1', got %q", task.RefID)
+	wantRef := "GHST-" + strings.ReplaceAll(task.ID, "-", "")[:8]
+	if task.RefID != wantRef {
+		t.Errorf("expected ref_id %q, got %q", wantRef, task.RefID)
+	}
+	if !strings.HasSuffix(task.Filename, "-test-task.json") {
+		t.Errorf("expected filename ending in -test-task.json, got %q", task.Filename)
+	}
+	today := time.Now().UTC().Format("2006-01-02")
+	if !strings.HasPrefix(task.Filename, today+"-") {
+		t.Errorf("expected filename starting with %q, got %q", today, task.Filename)
 	}
 
 	got, err := s.GetTask(task.ID)
 	if err != nil {
-		t.Fatalf("getting task: %v", err)
+		t.Fatalf("getting task by uuid: %v", err)
 	}
 	if got.Title != "Test task" {
 		t.Errorf("expected title 'Test task', got %q", got.Title)
+	}
+
+	// Lookup by RefID
+	got, err = s.GetTask(task.RefID)
+	if err != nil {
+		t.Fatalf("getting task by ref id: %v", err)
+	}
+	if got.ID != task.ID {
+		t.Errorf("ref-id lookup mismatch: got %q want %q", got.ID, task.ID)
+	}
+
+	// Lookup by slug
+	got, err = s.GetTask("test-task")
+	if err != nil {
+		t.Fatalf("getting task by slug: %v", err)
+	}
+	if got.ID != task.ID {
+		t.Errorf("slug lookup mismatch: got %q want %q", got.ID, task.ID)
+	}
+}
+
+func TestFilenameCollisionSuffix(t *testing.T) {
+	s := newTestStore(t)
+	t1, err := s.CreateTask(CreateTaskInput{Title: "new task"})
+	if err != nil {
+		t.Fatalf("creating first task: %v", err)
+	}
+	t2, err := s.CreateTask(CreateTaskInput{Title: "new task"})
+	if err != nil {
+		t.Fatalf("creating second task: %v", err)
+	}
+	if t1.Filename == t2.Filename {
+		t.Fatalf("expected different filenames, both got %q", t1.Filename)
+	}
+	if !strings.HasSuffix(t2.Filename, "-2.json") {
+		t.Errorf("expected -2.json suffix on second collision, got %q", t2.Filename)
 	}
 }
 
@@ -53,7 +102,6 @@ func TestListTasks(t *testing.T) {
 	s.CreateTask(CreateTaskInput{Title: "Task 2", Status: "in_progress", Milestone: "v1"})
 	s.CreateTask(CreateTaskInput{Title: "Task 3", Status: "done", Milestone: "v1"})
 
-	// List all
 	tasks, err := s.ListTasks("", "", "", "")
 	if err != nil {
 		t.Fatalf("listing tasks: %v", err)
@@ -62,7 +110,6 @@ func TestListTasks(t *testing.T) {
 		t.Errorf("expected 3 tasks, got %d", len(tasks))
 	}
 
-	// Filter by status
 	tasks, err = s.ListTasks("in_progress", "", "", "")
 	if err != nil {
 		t.Fatalf("listing tasks: %v", err)
@@ -71,7 +118,6 @@ func TestListTasks(t *testing.T) {
 		t.Errorf("expected 1 task, got %d", len(tasks))
 	}
 
-	// Filter by milestone
 	tasks, err = s.ListTasks("", "v1", "", "")
 	if err != nil {
 		t.Fatalf("listing tasks: %v", err)
@@ -83,11 +129,11 @@ func TestListTasks(t *testing.T) {
 
 func TestUpdateTask(t *testing.T) {
 	s := newTestStore(t)
-	s.CreateTask(CreateTaskInput{Title: "Original"})
+	created, _ := s.CreateTask(CreateTaskInput{Title: "Original"})
 
 	title := "Updated"
 	status := "in_progress"
-	task, err := s.UpdateTask(1, TaskUpdate{Title: &title, Status: &status})
+	task, err := s.UpdateTask(created.ID, TaskUpdate{Title: &title, Status: &status})
 	if err != nil {
 		t.Fatalf("updating task: %v", err)
 	}
@@ -97,14 +143,18 @@ func TestUpdateTask(t *testing.T) {
 	if task.Status != "in_progress" {
 		t.Errorf("expected status 'in_progress', got %q", task.Status)
 	}
+	// Filename must remain stable across title change.
+	if task.Filename != created.Filename {
+		t.Errorf("expected filename %q to remain after rename, got %q", created.Filename, task.Filename)
+	}
 }
 
 func TestUpdateTaskPlan(t *testing.T) {
 	s := newTestStore(t)
-	s.CreateTask(CreateTaskInput{Title: "Plan test"})
+	created, _ := s.CreateTask(CreateTaskInput{Title: "Plan test"})
 
 	plan := "## Steps\n1. Do thing A\n2. Do thing B"
-	task, err := s.UpdateTask(1, TaskUpdate{Plan: &plan})
+	task, err := s.UpdateTask(created.ID, TaskUpdate{Plan: &plan})
 	if err != nil {
 		t.Fatalf("updating task plan: %v", err)
 	}
@@ -112,16 +162,14 @@ func TestUpdateTaskPlan(t *testing.T) {
 		t.Errorf("expected plan %q, got %q", plan, task.Plan)
 	}
 
-	// Verify it persists via GetTask
-	got, err := s.GetTask(1)
+	got, err := s.GetTask(created.ID)
 	if err != nil {
 		t.Fatalf("getting task: %v", err)
 	}
 	if got.Plan != plan {
-		t.Errorf("expected plan %q after get, got %q", plan, got.Plan)
+		t.Errorf("expected plan after get, got %q", got.Plan)
 	}
 
-	// Verify plan shows in ListTasks
 	tasks, err := s.ListTasks("", "", "", "")
 	if err != nil {
 		t.Fatalf("listing tasks: %v", err)
@@ -134,7 +182,7 @@ func TestUpdateTaskPlan(t *testing.T) {
 func TestUpdateTaskNotFound(t *testing.T) {
 	s := newTestStore(t)
 	title := "Nope"
-	_, err := s.UpdateTask(999, TaskUpdate{Title: &title})
+	_, err := s.UpdateTask("missing-uuid", TaskUpdate{Title: &title})
 	if err == nil {
 		t.Fatal("expected error for non-existent task")
 	}
@@ -142,23 +190,19 @@ func TestUpdateTaskNotFound(t *testing.T) {
 
 func TestDeleteTask(t *testing.T) {
 	s := newTestStore(t)
-	s.CreateTask(CreateTaskInput{Title: "To delete"})
+	created, _ := s.CreateTask(CreateTaskInput{Title: "To delete"})
 
-	err := s.DeleteTask(1)
-	if err != nil {
+	if err := s.DeleteTask(created.ID); err != nil {
 		t.Fatalf("deleting task: %v", err)
 	}
-
-	_, err = s.GetTask(1)
-	if err == nil {
+	if _, err := s.GetTask(created.ID); err == nil {
 		t.Fatal("expected error getting deleted task")
 	}
 }
 
 func TestDeleteTaskNotFound(t *testing.T) {
 	s := newTestStore(t)
-	err := s.DeleteTask(999)
-	if err == nil {
+	if err := s.DeleteTask("nope"); err == nil {
 		t.Fatal("expected error for non-existent task")
 	}
 }
@@ -211,8 +255,8 @@ func TestTaskNewFields(t *testing.T) {
 	if task.Type != "bug" {
 		t.Errorf("expected type 'bug', got %q", task.Type)
 	}
-	if task.RefID != "GHST-1" {
-		t.Errorf("expected ref_id 'GHST-1', got %q", task.RefID)
+	if !strings.HasPrefix(task.RefID, "GHST-") || len(task.RefID) != 5+8 {
+		t.Errorf("unexpected ref_id %q", task.RefID)
 	}
 }
 
@@ -233,7 +277,6 @@ func TestPriorityAndTypeFiltering(t *testing.T) {
 	s.CreateTask(CreateTaskInput{Title: "Low feature", Priority: "low", Type: "feature"})
 	s.CreateTask(CreateTaskInput{Title: "High feature", Priority: "high", Type: "feature"})
 
-	// Filter by priority
 	tasks, err := s.ListTasks("", "", "high", "")
 	if err != nil {
 		t.Fatalf("listing tasks by priority: %v", err)
@@ -242,7 +285,6 @@ func TestPriorityAndTypeFiltering(t *testing.T) {
 		t.Errorf("expected 2 high-priority tasks, got %d", len(tasks))
 	}
 
-	// Filter by type
 	tasks, err = s.ListTasks("", "", "", "feature")
 	if err != nil {
 		t.Fatalf("listing tasks by type: %v", err)
@@ -251,7 +293,6 @@ func TestPriorityAndTypeFiltering(t *testing.T) {
 		t.Errorf("expected 2 feature tasks, got %d", len(tasks))
 	}
 
-	// Filter by both
 	tasks, err = s.ListTasks("", "", "high", "bug")
 	if err != nil {
 		t.Fatalf("listing tasks by priority+type: %v", err)
@@ -263,12 +304,12 @@ func TestPriorityAndTypeFiltering(t *testing.T) {
 
 func TestUpdateTaskPriorityAndType(t *testing.T) {
 	s := newTestStore(t)
-	s.CreateTask(CreateTaskInput{Title: "Update me"})
+	created, _ := s.CreateTask(CreateTaskInput{Title: "Update me"})
 
 	priority := "urgent"
 	taskType := "chore"
 	legacyID := "JIRA-123"
-	task, err := s.UpdateTask(1, TaskUpdate{Priority: &priority, Type: &taskType, LegacyID: &legacyID})
+	task, err := s.UpdateTask(created.ID, TaskUpdate{Priority: &priority, Type: &taskType, LegacyID: &legacyID})
 	if err != nil {
 		t.Fatalf("updating task: %v", err)
 	}
@@ -280,23 +321,6 @@ func TestUpdateTaskPriorityAndType(t *testing.T) {
 	}
 	if task.LegacyID != "JIRA-123" {
 		t.Errorf("expected legacy_id 'JIRA-123', got %q", task.LegacyID)
-	}
-}
-
-func TestRefIDAutoGeneration(t *testing.T) {
-	s := newTestStore(t)
-	t1, _ := s.CreateTask(CreateTaskInput{Title: "First"})
-	t2, _ := s.CreateTask(CreateTaskInput{Title: "Second"})
-	t3, _ := s.CreateTask(CreateTaskInput{Title: "Third"})
-
-	if t1.RefID != "GHST-1" {
-		t.Errorf("expected GHST-1, got %q", t1.RefID)
-	}
-	if t2.RefID != "GHST-2" {
-		t.Errorf("expected GHST-2, got %q", t2.RefID)
-	}
-	if t3.RefID != "GHST-3" {
-		t.Errorf("expected GHST-3, got %q", t3.RefID)
 	}
 }
 
@@ -329,7 +353,7 @@ func TestEventWithTask(t *testing.T) {
 		t.Fatalf("creating event: %v", err)
 	}
 	if event.TaskID == nil || *event.TaskID != taskID {
-		t.Errorf("expected task_id %d, got %v", taskID, event.TaskID)
+		t.Errorf("expected task_id %q, got %v", taskID, event.TaskID)
 	}
 }
 
@@ -416,5 +440,103 @@ func TestDeleteTaskSetsEventTaskNull(t *testing.T) {
 	}
 	if got.TaskID != nil {
 		t.Errorf("expected nil task_id after delete, got %v", got.TaskID)
+	}
+}
+
+// --- Slug helper ---
+
+func TestSlugify(t *testing.T) {
+	tests := map[string]string{
+		"new task":            "new-task",
+		"  Hello, World!  ":   "hello-world",
+		"Multiple   spaces":   "multiple-spaces",
+		"---leading---":       "leading",
+		"":                    "untitled",
+		"!!!":                 "untitled",
+		"Кириллица":           "untitled",
+		"Plan v1.2 (final)!!": "plan-v1-2-final",
+	}
+	for in, want := range tests {
+		if got := slugify(in); got != want {
+			t.Errorf("slugify(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// --- Legacy migration ---
+
+func TestMigrateLegacyTasks(t *testing.T) {
+	dir := t.TempDir()
+	tasksDir := filepath.Join(dir, "tasks")
+	eventsDir := filepath.Join(dir, "events")
+	if err := os.MkdirAll(tasksDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(eventsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	created := time.Date(2024, 2, 1, 12, 0, 0, 0, time.UTC)
+	legacyTask := map[string]any{
+		"id":          1,
+		"title":       "Old task",
+		"description": "",
+		"status":      "todo",
+		"ref_id":      "GHST-1",
+		"created_at":  created.Format(time.RFC3339),
+		"updated_at":  created.Format(time.RFC3339),
+	}
+	taskBytes, _ := json.MarshalIndent(legacyTask, "", "  ")
+	if err := os.WriteFile(filepath.Join(tasksDir, "1.json"), taskBytes, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	legacyEvent := map[string]any{
+		"id":         1,
+		"type":       "log",
+		"message":    "Linked to old task",
+		"metadata":   "{}",
+		"task_id":    1,
+		"created_at": created.Format(time.RFC3339),
+	}
+	evBytes, _ := json.MarshalIndent(legacyEvent, "", "  ")
+	if err := os.WriteFile(filepath.Join(eventsDir, "1.json"), evBytes, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatalf("opening store with legacy data: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(tasksDir, "1.json")); !os.IsNotExist(err) {
+		t.Errorf("expected legacy 1.json to be removed, got err=%v", err)
+	}
+	wantPath := filepath.Join(tasksDir, "2024-02-01-old-task.json")
+	if _, err := os.Stat(wantPath); err != nil {
+		t.Fatalf("expected migrated file at %s, got err=%v", wantPath, err)
+	}
+
+	tasks, err := s.ListTasks("", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tasks) != 1 {
+		t.Fatalf("expected 1 task post-migration, got %d", len(tasks))
+	}
+	migrated := tasks[0]
+	if len(migrated.ID) < 32 {
+		t.Errorf("expected UUID id, got %q", migrated.ID)
+	}
+	if migrated.LegacyID != "1" {
+		t.Errorf("expected legacy_id=1, got %q", migrated.LegacyID)
+	}
+
+	ev, err := s.GetEvent(1)
+	if err != nil {
+		t.Fatalf("getting migrated event: %v", err)
+	}
+	if ev.TaskID == nil || *ev.TaskID != migrated.ID {
+		t.Errorf("expected event task_id rewritten to %q, got %v", migrated.ID, ev.TaskID)
 	}
 }

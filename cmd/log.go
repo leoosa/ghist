@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/unnecessary-special-projects/ghist/internal/project"
 	"github.com/spf13/cobra"
+	"github.com/unnecessary-special-projects/ghist/internal/project"
 )
 
 var logCmd = &cobra.Command{
@@ -20,11 +20,15 @@ var logCmd = &cobra.Command{
 		defer s.Close()
 
 		typ, _ := cmd.Flags().GetString("type")
-		taskID, _ := cmd.Flags().GetInt64("task")
+		taskRef, _ := cmd.Flags().GetString("task")
 
-		var taskIDPtr *int64
-		if cmd.Flags().Changed("task") {
-			taskIDPtr = &taskID
+		var taskIDPtr *string
+		if cmd.Flags().Changed("task") && taskRef != "" {
+			task, err := s.GetTask(taskRef)
+			if err != nil {
+				return err
+			}
+			taskIDPtr = &task.ID
 		}
 
 		event, err := s.CreateEvent(typ, args[0], "{}", taskIDPtr)
@@ -43,6 +47,6 @@ var logCmd = &cobra.Command{
 
 func init() {
 	logCmd.Flags().StringP("type", "t", "log", "Event type (log, decision, note)")
-	logCmd.Flags().Int64P("task", "T", 0, "Link to task ID")
+	logCmd.Flags().StringP("task", "T", "", "Link to task (UUID, GHST-xxxx, or slug)")
 	rootCmd.AddCommand(logCmd)
 }

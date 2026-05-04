@@ -67,11 +67,7 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGetTask(w http.ResponseWriter, r *http.Request) {
-	id, err := models.ParseTaskID(r.PathValue("id"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid task id")
-		return
-	}
+	id := r.PathValue("id")
 
 	task, err := s.store.GetTask(id)
 	if err != nil {
@@ -95,11 +91,7 @@ type updateTaskRequest struct {
 }
 
 func (s *Server) handleUpdateTask(w http.ResponseWriter, r *http.Request) {
-	id, err := models.ParseTaskID(r.PathValue("id"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid task id")
-		return
-	}
+	id := r.PathValue("id")
 
 	var req updateTaskRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -127,11 +119,7 @@ func (s *Server) handleUpdateTask(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeleteTask(w http.ResponseWriter, r *http.Request) {
-	id, err := models.ParseTaskID(r.PathValue("id"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid task id")
-		return
-	}
+	id := r.PathValue("id")
 
 	if err := s.store.DeleteTask(id); err != nil {
 		writeError(w, http.StatusNotFound, err.Error())
