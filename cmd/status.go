@@ -92,7 +92,7 @@ var statusCmd = &cobra.Command{
 			for _, e := range events {
 				taskInfo := ""
 				if e.TaskID != nil {
-					taskInfo = fmt.Sprintf(" (task %s)", *e.TaskID)
+					taskInfo = fmt.Sprintf(" (task %s)", models.RefIDFor(*e.TaskID))
 				}
 				fmt.Printf("  [%s] %s%s\n", e.CreatedAt.Format("2006-01-02 15:04"), e.Message, taskInfo)
 			}

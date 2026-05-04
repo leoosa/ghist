@@ -118,11 +118,11 @@ Project Status
 Tasks: 8 total (2 todo, 1 in_progress, 5 done)
 
 In Progress:
-  #4  User authentication  [plan saved]
+  GHST-4f7a2b1c  User authentication  [plan saved]
 
 Recent Events:
   [2025-06-14 09:15] Started implementing JWT middleware
-  [2025-06-14 09:02] Moved task #4 to in_progress
+  [2025-06-14 09:02] Moved task GHST-4f7a2b1c to in_progress
 ```
 
 If there is an in-progress task with a saved plan, the agent reads it and continues from where the last session ended.
@@ -146,7 +146,7 @@ Commit hashes are shown in the web UI and link directly to GitHub if your repo h
 As the agent works it can log decisions and notes to the event timeline. These show up in `ghist status` so future sessions have the context they need without re-debating the same trade-offs.
 
 ```bash
-ghist log "Using JWT over sessions, simpler for stateless API" --type decision --task 4
+ghist log "Using JWT over sessions, simpler for stateless API" --type decision --task user-authentication
 ```
 
 ## How It Works
@@ -227,7 +227,7 @@ EOF
 
 ```bash
 ghist log "Decided to use JWT for auth"           # Log a decision
-ghist log "Completed API refactor" --task 5        # Link to a task
+ghist log "Completed API refactor" --task api-refactor   # Link to a task (UUID, RefID, or slug)
 ghist log "Need to revisit caching" --type note    # Types: log, decision, note
 ```
 

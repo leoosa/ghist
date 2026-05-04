@@ -221,9 +221,12 @@ var taskDeleteCmd = &cobra.Command{
 		}
 		defer s.Close()
 
-		id := args[0]
+		task, err := s.GetTask(args[0])
+		if err != nil {
+			return err
+		}
 
-		if err := s.DeleteTask(id); err != nil {
+		if err := s.DeleteTask(task.ID); err != nil {
 			return err
 		}
 
@@ -231,7 +234,7 @@ var taskDeleteCmd = &cobra.Command{
 			fmt.Fprintf(os.Stderr, "warning: failed to update context: %v\n", err)
 		}
 
-		fmt.Printf("Deleted task %s\n", id)
+		fmt.Printf("Deleted task %s: %s\n", task.RefID, task.Title)
 		return nil
 	},
 }
