@@ -16,9 +16,9 @@ export interface ITaskDrawer {
   task: Task | null;
   mode: "view" | "create" | null;
   onClose: () => void;
-  onUpdateTask: (id: number, data: Record<string, string>) => void;
+  onUpdateTask: (id: string, data: Record<string, string>) => void;
   onCreateTask: (data: { title: string; description: string; status: TaskStatus; milestone: string; priority: TaskPriority; type: TaskType }) => void;
-  onDeleteTask: (id: number) => void;
+  onDeleteTask: (id: string) => void;
   repoURL?: string;
 }
 
@@ -206,7 +206,7 @@ function CreateContent({
 
 // ---------- Details Tab ----------
 
-function DetailsTab({ task, onUpdate, onDelete, repoURL }: { task: Task; onUpdate: (id: number, data: Record<string, string>) => void; onDelete: (id: number) => void; repoURL?: string }) {
+function DetailsTab({ task, onUpdate, onDelete, repoURL }: { task: Task; onUpdate: (id: string, data: Record<string, string>) => void; onDelete: (id: string) => void; repoURL?: string }) {
   const save = (field: string) => (value: string) => onUpdate(task.id, { [field]: value });
 
   return (
@@ -274,7 +274,7 @@ function DetailsTab({ task, onUpdate, onDelete, repoURL }: { task: Task; onUpdat
 
 // ---------- Plan Tab ----------
 
-function PlanTab({ task, onUpdate }: { task: Task; onUpdate: (id: number, data: Record<string, string>) => void }) {
+function PlanTab({ task, onUpdate }: { task: Task; onUpdate: (id: string, data: Record<string, string>) => void }) {
   const [editMode, setEditMode] = useState(false);
   const [draft, setDraft] = useState(task.plan);
 

@@ -3,7 +3,7 @@ export type TaskPriority = '' | 'low' | 'medium' | 'high' | 'urgent';
 export type TaskType = '' | 'bug' | 'feature' | 'improvement' | 'chore';
 
 export interface Task {
-  id: number;
+  id: string;
   title: string;
   description: string;
   plan: string;
@@ -23,7 +23,7 @@ export interface Event {
   type: string;
   message: string;
   metadata: string;
-  task_id: number | null;
+  task_id: string | null;
   created_at: string;
 }
 

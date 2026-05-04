@@ -21,18 +21,20 @@ This project uses [ghist](https://github.com/unnecessary-special-projects/ghist)
 
 **Required:** Run ` + "`ghist status`" + ` at the start of every session.
 
+Tasks are addressable by their RefID (` + "`GHST-xxxxxxxx`" + ` — printed by ` + "`ghist task add`" + `), full UUID, filename slug, or any unique UUID prefix. The ` + "`<ref>`" + ` placeholder below accepts any of those forms.
+
 ### Workflow Rules
-1. **Save plans to the task as soon as they're ready:** ` + "`cat <<'EOF' | ghist task update <id> --plan-stdin`" + `
+1. **Save plans to the task as soon as they're ready:** ` + "`cat <<'EOF' | ghist task update <ref> --plan-stdin`" + `
 2. **Keep the plan current** — update it on every meaningful change as work progresses.
 3. **Write implementation notes on the task** when work is complete — append a ` + "`## Implementation Notes`" + ` section to the plan via ` + "`--plan-stdin`" + `.
 4. **Ask the user before closing** a task — never auto-close.
 
 ### Quick Reference
 - ` + "`ghist task list`" + ` — see all tasks
-- ` + "`ghist task add \"title\"`" + ` — create a task
-- ` + "`ghist task update <id> --status in_progress`" + ` — update status
-- ` + "`ghist task update <id> --plan-stdin`" + ` — save or update a plan (pipe via stdin)
-- ` + "`ghist log \"message\"`" + ` — record a decision or note
+- ` + "`ghist task add \"title\"`" + ` — create a task (prints the RefID; capture with ` + "`TASK_REF=$(ghist task add \"...\" | awk '{print $3}' | tr -d :)`" + ` to reuse downstream)
+- ` + "`ghist task update <ref> --status in_progress`" + ` — update status
+- ` + "`ghist task update <ref> --plan-stdin`" + ` — save or update a plan (pipe via stdin)
+- ` + "`ghist log \"message\" --task <ref>`" + ` — record a decision or note, optionally linked to a task
 - ` + "`ghist skills show <name>`" + ` — read detailed skill instructions
 
 ### Available Skills

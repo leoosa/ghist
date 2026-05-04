@@ -35,7 +35,7 @@ const MILESTONE_PREFIX = "milestone:";
 
 export interface IPlanView {
   tasks: Task[];
-  onMilestoneChange: (id: number, milestone: string) => void;
+  onMilestoneChange: (id: string, milestone: string) => void;
   onCardClick?: (task: Task) => void;
   milestoneOrder: string[];
   onMilestoneOrderChange: (order: string[]) => void;
@@ -97,7 +97,7 @@ export const PlanView: React.FC<IPlanView> = (props) => {
       props.onMilestoneOrderChange(newMilestones);
     } else {
       // Card drag to milestone
-      const taskId = active.id as number;
+      const taskId = String(active.id);
       const dropId = over.id as string;
       // Strip milestone prefix if dropping on a milestone header
       const rawDrop = dropId.startsWith(MILESTONE_PREFIX)

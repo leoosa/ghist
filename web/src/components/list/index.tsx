@@ -9,7 +9,7 @@ import { TaskCard } from "../task-card";
 
 export interface IList {
   tasks: Task[];
-  onStatusChange: (id: number, status: TaskStatus) => void;
+  onStatusChange: (id: string, status: TaskStatus) => void;
   onCardClick?: (task: Task) => void;
 }
 
@@ -30,7 +30,7 @@ export const List: React.FC<IList> = (props) => {
     const { active, over } = event;
     if (!over) return;
 
-    const taskId = active.id as number;
+    const taskId = String(active.id);
     const newStatus = over.id as TaskStatus;
 
     const task = props.tasks.find((t) => t.id === taskId);

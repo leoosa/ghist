@@ -2,34 +2,45 @@ package models
 
 import "testing"
 
-func TestParseTaskID(t *testing.T) {
+func TestNormalizeRef(t *testing.T) {
 	tests := []struct {
 		input   string
-		want    int64
+		want    string
 		wantErr bool
 	}{
-		{"19", 19, false},
-		{"1", 1, false},
-		{"GHST-19", 19, false},
-		{"ghst-19", 19, false},
-		{"Ghst-5", 5, false},
-		{"  GHST-42  ", 42, false},
-		{"  7  ", 7, false},
-		{"abc", 0, true},
-		{"GHST-", 0, true},
-		{"GHST-abc", 0, true},
-		{"", 0, true},
-		{"FOO-19", 0, true},
+		{"abcdef", "abcdef", false},
+		{"GHST-abcdef", "abcdef", false},
+		{"ghst-abcdef", "abcdef", false},
+		{"  GHST-deadbeef  ", "deadbeef", false},
+		{"f47ac10b-58cc-4372-a567-0e02b2c3d479", "f47ac10b-58cc-4372-a567-0e02b2c3d479", false},
+		{"", "", true},
+		{"   ", "", true},
 	}
 
 	for _, tt := range tests {
-		got, err := ParseTaskID(tt.input)
+		got, err := NormalizeRef(tt.input)
 		if (err != nil) != tt.wantErr {
-			t.Errorf("ParseTaskID(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+			t.Errorf("NormalizeRef(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
 			continue
 		}
 		if got != tt.want {
-			t.Errorf("ParseTaskID(%q) = %d, want %d", tt.input, got, tt.want)
+			t.Errorf("NormalizeRef(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestRefIDFor(t *testing.T) {
+	tests := []struct {
+		uuid string
+		want string
+	}{
+		{"f47ac10b-58cc-4372-a567-0e02b2c3d479", "GHST-f47ac10b"},
+		{"abcd1234", "GHST-abcd1234"},
+		{"abc", "GHST-abc"},
+	}
+	for _, tt := range tests {
+		if got := RefIDFor(tt.uuid); got != tt.want {
+			t.Errorf("RefIDFor(%q) = %q, want %q", tt.uuid, got, tt.want)
 		}
 	}
 }

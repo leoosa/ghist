@@ -6,8 +6,10 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/unnecessary-special-projects/ghist/internal/models"
 )
 
@@ -33,19 +35,20 @@ func (s *Store) tasksDir() string {
 	return filepath.Join(s.root, "tasks")
 }
 
-func (s *Store) taskPath(id int64) string {
-	return filepath.Join(s.tasksDir(), fmt.Sprintf("%d.json", id))
+func (s *Store) taskPathByName(filename string) string {
+	return filepath.Join(s.tasksDir(), filename)
 }
 
 func (s *Store) CreateTask(in CreateTaskInput) (*models.Task, error) {
 	if in.Status == "" {
 		in.Status = "todo"
 	}
-	id, err := nextID(s.tasksDir())
-	if err != nil {
-		return nil, fmt.Errorf("getting next id: %w", err)
-	}
 	now := time.Now().UTC()
+	id := uuid.NewString()
+	filename, err := s.taskFilename(now, in.Title)
+	if err != nil {
+		return nil, err
+	}
 	t := models.Task{
 		ID:          id,
 		Title:       in.Title,
@@ -55,9 +58,10 @@ func (s *Store) CreateTask(in CreateTaskInput) (*models.Task, error) {
 		Priority:    in.Priority,
 		Type:        in.Type,
 		LegacyID:    in.LegacyID,
-		RefID:       fmt.Sprintf("GHST-%d", id),
+		RefID:       models.RefIDFor(id),
 		CreatedAt:   now,
 		UpdatedAt:   now,
+		Filename:    filename,
 	}
 	if err := s.writeTask(&t); err != nil {
 		return nil, err
@@ -65,40 +69,27 @@ func (s *Store) CreateTask(in CreateTaskInput) (*models.Task, error) {
 	return &t, nil
 }
 
-func (s *Store) GetTask(id int64) (*models.Task, error) {
-	data, err := os.ReadFile(s.taskPath(id))
+// GetTask resolves any of UUID / RefID / filename slug / unique UUID prefix.
+func (s *Store) GetTask(ref string) (*models.Task, error) {
+	tasks, err := s.readAllTasks()
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("task not found")
-		}
-		return nil, fmt.Errorf("reading task %d: %w", id, err)
+		return nil, err
 	}
-	var t models.Task
-	if err := json.Unmarshal(data, &t); err != nil {
-		return nil, fmt.Errorf("parsing task %d: %w", id, err)
+	t, err := resolveTaskFromList(tasks, ref)
+	if err != nil {
+		return nil, err
 	}
-	return &t, nil
+	return t, nil
 }
 
 func (s *Store) ListTasks(status, milestone, priority, taskType string) ([]models.Task, error) {
-	entries, err := os.ReadDir(s.tasksDir())
+	tasks, err := s.readAllTasks()
 	if err != nil {
-		return nil, fmt.Errorf("listing tasks: %w", err)
+		return nil, err
 	}
 
-	var tasks []models.Task
-	for _, e := range entries {
-		if e.IsDir() || filepath.Ext(e.Name()) != ".json" {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(s.tasksDir(), e.Name()))
-		if err != nil {
-			return nil, fmt.Errorf("reading task file %s: %w", e.Name(), err)
-		}
-		var t models.Task
-		if err := json.Unmarshal(data, &t); err != nil {
-			return nil, fmt.Errorf("parsing task file %s: %w", e.Name(), err)
-		}
+	out := tasks[:0]
+	for _, t := range tasks {
 		if status != "" && t.Status != status {
 			continue
 		}
@@ -111,19 +102,19 @@ func (s *Store) ListTasks(status, milestone, priority, taskType string) ([]model
 		if taskType != "" && t.Type != taskType {
 			continue
 		}
-		tasks = append(tasks, t)
+		out = append(out, t)
 	}
 
-	sort.Slice(tasks, func(i, j int) bool {
-		return tasks[i].ID < tasks[j].ID
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].CreatedAt.Before(out[j].CreatedAt)
 	})
-	return tasks, nil
+	return out, nil
 }
 
-func (s *Store) UpdateTask(id int64, u TaskUpdate) (*models.Task, error) {
-	t, err := s.GetTask(id)
+func (s *Store) UpdateTask(ref string, u TaskUpdate) (*models.Task, error) {
+	t, err := s.GetTask(ref)
 	if err != nil {
-		return nil, fmt.Errorf("task %d not found", id)
+		return nil, err
 	}
 
 	if u.Title != nil {
@@ -161,16 +152,18 @@ func (s *Store) UpdateTask(id int64, u TaskUpdate) (*models.Task, error) {
 	return t, nil
 }
 
-func (s *Store) DeleteTask(id int64) error {
-	path := s.taskPath(id)
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return fmt.Errorf("task %d not found", id)
+func (s *Store) DeleteTask(ref string) error {
+	t, err := s.GetTask(ref)
+	if err != nil {
+		return err
 	}
-	if err := os.Remove(path); err != nil {
-		return fmt.Errorf("deleting task %d: %w", id, err)
+	if t.Filename == "" {
+		return fmt.Errorf("task %s has no filename on disk", t.ID)
 	}
-	// Cascade: clear task_id on any events that reference this task.
-	s.clearEventTaskID(id)
+	if err := os.Remove(s.taskPathByName(t.Filename)); err != nil {
+		return fmt.Errorf("deleting task %s: %w", t.ID, err)
+	}
+	s.clearEventTaskID(t.ID)
 	return nil
 }
 
@@ -225,10 +218,96 @@ func (s *Store) MilestoneInfo() ([]models.MilestoneInfo, error) {
 	return milestones, nil
 }
 
+// writeTask persists a task using its Filename. If Filename is empty, it is
+// derived from CreatedAt + Title (used by migration paths).
 func (s *Store) writeTask(t *models.Task) error {
+	if t.Filename == "" {
+		fn, err := s.taskFilename(t.CreatedAt, t.Title)
+		if err != nil {
+			return err
+		}
+		t.Filename = fn
+	}
 	data, err := json.MarshalIndent(t, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshaling task: %w", err)
 	}
-	return os.WriteFile(s.taskPath(t.ID), data, 0644)
+	return os.WriteFile(s.taskPathByName(t.Filename), data, 0644)
+}
+
+func (s *Store) readAllTasks() ([]models.Task, error) {
+	entries, err := os.ReadDir(s.tasksDir())
+	if err != nil {
+		return nil, fmt.Errorf("listing tasks: %w", err)
+	}
+	tasks := make([]models.Task, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() || filepath.Ext(e.Name()) != ".json" {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(s.tasksDir(), e.Name()))
+		if err != nil {
+			return nil, fmt.Errorf("reading task file %s: %w", e.Name(), err)
+		}
+		var t models.Task
+		if err := json.Unmarshal(data, &t); err != nil {
+			return nil, fmt.Errorf("parsing task file %s: %w", e.Name(), err)
+		}
+		t.Filename = e.Name()
+		tasks = append(tasks, t)
+	}
+	return tasks, nil
+}
+
+// resolveTaskFromList finds a task by UUID, RefID ("GHST-xxxx"), filename slug,
+// or unique UUID prefix. Errors when nothing matches or the prefix is ambiguous.
+func resolveTaskFromList(tasks []models.Task, ref string) (*models.Task, error) {
+	norm, err := models.NormalizeRef(ref)
+	if err != nil {
+		return nil, err
+	}
+	normLower := strings.ToLower(norm)
+
+	for i := range tasks {
+		if tasks[i].ID == norm {
+			return &tasks[i], nil
+		}
+	}
+	for i := range tasks {
+		if strings.EqualFold(tasks[i].RefID, "GHST-"+norm) {
+			return &tasks[i], nil
+		}
+	}
+	for i := range tasks {
+		fn := strings.TrimSuffix(tasks[i].Filename, ".json")
+		if fn == "" {
+			continue
+		}
+		// Match either the full filename slug or just the title-slug portion
+		// (filename = "<date>-<slug>" — slug starts after the 11th char).
+		titleSlug := fn
+		if len(fn) > 11 {
+			titleSlug = fn[11:]
+		}
+		if strings.EqualFold(fn, norm) || strings.EqualFold(titleSlug, norm) {
+			return &tasks[i], nil
+		}
+	}
+	var prefixMatches []*models.Task
+	for i := range tasks {
+		if strings.HasPrefix(strings.ToLower(tasks[i].ID), normLower) {
+			prefixMatches = append(prefixMatches, &tasks[i])
+		}
+	}
+	if len(prefixMatches) == 1 {
+		return prefixMatches[0], nil
+	}
+	if len(prefixMatches) > 1 {
+		var refs []string
+		for _, t := range prefixMatches {
+			refs = append(refs, t.RefID)
+		}
+		return nil, fmt.Errorf("ambiguous task reference %q: matches %s", ref, strings.Join(refs, ", "))
+	}
+	return nil, fmt.Errorf("task not found: %s", ref)
 }

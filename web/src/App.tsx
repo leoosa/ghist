@@ -61,7 +61,7 @@ export function App() {
     }
   };
 
-  const handleStatusChange = async (id: number, status: TaskStatus) => {
+  const handleStatusChange = async (id: string, status: TaskStatus) => {
     // Optimistic update
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status } : t)));
     if (drawerTask?.id === id) {
@@ -75,7 +75,7 @@ export function App() {
     }
   };
 
-  const handleMilestoneChange = async (id: number, milestone: string) => {
+  const handleMilestoneChange = async (id: string, milestone: string) => {
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, milestone } : t)));
     if (drawerTask?.id === id) {
       setDrawerTask((prev) => prev ? { ...prev, milestone } : null);
@@ -103,7 +103,7 @@ export function App() {
     setDrawerTask(null);
   };
 
-  const handleFieldSave = async (id: number, data: Record<string, string>) => {
+  const handleFieldSave = async (id: string, data: Record<string, string>) => {
     // Optimistic update
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...data } : t)));
     if (drawerTask?.id === id) {
@@ -134,7 +134,7 @@ export function App() {
     setDrawerMode('view');
   };
 
-  const handleDeleteTask = async (id: number) => {
+  const handleDeleteTask = async (id: string) => {
     await api.deleteTask(id);
     if (drawerTask?.id === id) {
       setDrawerMode(null);

@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 
-	"github.com/unnecessary-special-projects/ghist/internal/models"
 	"github.com/unnecessary-special-projects/ghist/internal/output"
 	"github.com/unnecessary-special-projects/ghist/internal/project"
 	"github.com/unnecessary-special-projects/ghist/internal/store"
@@ -115,10 +114,7 @@ var taskShowCmd = &cobra.Command{
 		}
 		defer s.Close()
 
-		id, err := models.ParseTaskID(args[0])
-		if err != nil {
-			return err
-		}
+		id := args[0]
 
 		task, err := s.GetTask(id)
 		if err != nil {
@@ -148,10 +144,7 @@ var taskUpdateCmd = &cobra.Command{
 		}
 		defer s.Close()
 
-		id, err := models.ParseTaskID(args[0])
-		if err != nil {
-			return err
-		}
+		id := args[0]
 
 		u := store.TaskUpdate{}
 
@@ -228,12 +221,12 @@ var taskDeleteCmd = &cobra.Command{
 		}
 		defer s.Close()
 
-		id, err := models.ParseTaskID(args[0])
+		task, err := s.GetTask(args[0])
 		if err != nil {
 			return err
 		}
 
-		if err := s.DeleteTask(id); err != nil {
+		if err := s.DeleteTask(task.ID); err != nil {
 			return err
 		}
 
@@ -241,7 +234,7 @@ var taskDeleteCmd = &cobra.Command{
 			fmt.Fprintf(os.Stderr, "warning: failed to update context: %v\n", err)
 		}
 
-		fmt.Printf("Deleted task #%d\n", id)
+		fmt.Printf("Deleted task %s: %s\n", task.RefID, task.Title)
 		return nil
 	},
 }

@@ -18,9 +18,9 @@ Basic log entry:
 ghist log "Chose REST over GraphQL for simplicity"
 ```
 
-Log linked to a task:
+Log linked to a task (`--task` accepts UUID, RefID, or filename slug):
 ```
-ghist log "Decided to use @dnd-kit for drag-and-drop" --task 5
+ghist log "Decided to use @dnd-kit for drag-and-drop" --task drag-and-drop-board
 ```
 
 Log with a type for categorization:
